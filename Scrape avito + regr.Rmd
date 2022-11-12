@@ -1,0 +1,141 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(rvest)
+con <- url(
+  "https://www.avito.ru/kazan/kvartiry/prodam/novostroyka-ASgBAQICAUSSA8YQAUDmBxSOUg?q=%D0%BA%D1%83%D0%BF%D0%B8%D1%82%D1%8C+%D0%BA%D0%B2%D0%B0%D1%80%D1%82%D0%B8%D1%80%D1%83+%D0%B2+%D0%BD%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B5+%D1%80%D1%8F%D0%B4%D0%BE%D0%BC+%D1%81+%D0%BC%D0%B5%D1%82%D1%80%D0%BE", "rb") 
+
+bodyy <- read_html(con)%>%
+  html_nodes("body")  
+bodyy
+```
+
+```{r}
+descr <- bodyy%>%
+  html_nodes("h3") %>%
+  html_text()
+descr
+
+```
+
+```{r}
+cost <- bodyy%>% 
+  html_nodes("[class='price-text-_YGDY text-text-LurtD text-size-s-BxGpL']")%>%
+  html_text2()  
+cost
+```
+
+```{r}
+metro <- bodyy%>%
+  html_nodes("[class='geo-georeferences-SEtee text-text-LurtD text-size-s-BxGpL']")%>%
+  html_text2()  
+metro
+
+```
+
+```{r}
+#split description
+descr_split = strsplit(descr, ", ") 
+df <- data.frame(matrix(unlist(descr_split), nrow=length(descr_split), byrow=TRUE))
+df$metro = metro
+df$cost = cost
+df
+```
+
+```{r}
+#get count of rooms 
+room = gsub("Квартира-студия", "0",  df$X1)
+room = as.numeric(gsub("([0-9]+).*$", "\\1", room))
+df_new <-  as.data.frame(room) 
+df_new
+```
+
+```{r}
+#get square of flat  
+square = as.numeric(gsub("([0-9]+).*$", "\\1", df$X2))
+df_new$square = square
+df_new
+```
+
+```{r}
+#get floor of flat and total floors in house
+floor  <-   gsub("эт.", "",  df$X3)
+floor_split = strsplit(floor, "/")
+floor_df <- data.frame(matrix(unlist(floor_split), nrow=length(floor_split), byrow=TRUE))
+floor_df$X2  <-  as.numeric(gsub("([0-9]+).*$", "\\1", floor_df$X2 ))
+floor_df$X2
+df_new$floor =  as.numeric(floor_df$X1) 
+df_new$total_floor =   as.numeric(floor_df$X2)
+```
+
+```{r}
+#get cost of flat
+cost_num = gsub(" ", "",  cost)
+cost_num = gsub("₽", "",  cost_num)
+cost_num
+df_new$cost = as.numeric(cost_num)
+```
+
+```{r}
+#get name of station and distance
+dist  <- gsub("[^0-9–-]", "", metro) #remove all characters
+dist = gsub("-", "60",  dist) #where there is no station set 60 min
+dist =  as.numeric(gsub("([0-9]+).*$", "\\1", dist )) #get min dist
+dist
+
+station <- gsub("мин.", "",  metro) #remove bad words
+station <-  gsub("от", "",  station)
+station <-  gsub("до", "",  station)
+station<- gsub('[[:digit:]]+', '', station)#remove digits
+station <- gsub("–", "",  station)#remove bad characters
+station <- trimws(station)#remove white space
+station
+
+df_new$dist = dist
+df_new
+```
+
+```{r}
+#one hot encoding
+library(sjlabelled)
+x <- to_factor(station)
+oh_train <- model.matrix(~0+x) 
+attr(oh_train, "dimnames")[[2]] <- levels(x)
+df_itog <-cbind(df_new,oh_train)
+df_itog
+```
+
+```{r}
+y<-df_itog$cost
+x<-df_itog[ , -which(names(df_itog) %in% c("cost"))]
+x
+y
+```
+
+```{r}
+# all variables as regressors
+lm.y <- lm(y ~ ., data = x)
+summary(lm.y)
+```
+
+```{r}
+xx=x<-df_itog[ , -which(names(df_itog) %in% c("cost"))]
+xх
+lm2.y <- lm(y ~ ., data = xx)
+summary(lm2.y)
+```
+
+```{r}
+xx=df_itog[ , c("square", "room", "floor", "total_floor", "dist")]
+xx
+lm2.y <- lm(y ~ ., data = xx)
+summary(lm2.y)
+
+```
+
+```{r}
+
+```
